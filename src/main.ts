@@ -10,14 +10,9 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS - Allow frontend origins
+  // Enable CORS - Accept all origins dynamically
   app.enableCors({
-    origin: [
-      'https://governeai-governe-ai-frontend.gkgtsp.easypanel.host',
-      'http://localhost:8081',
-      'http://localhost:19006',
-      '*',
-    ],
+    origin: true, // Reflects the request origin, works with credentials
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
     credentials: true,
