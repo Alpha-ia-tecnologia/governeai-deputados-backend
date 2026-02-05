@@ -1,0 +1,12 @@
+# Force Node.js 22 for EasyPanel deploy (Node 18 EOL removed from Nixpacks)
+[phases.setup]
+nixPkgs = ["nodejs_22", "npm"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start:prod"
