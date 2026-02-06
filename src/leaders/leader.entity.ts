@@ -27,6 +27,9 @@ export class Leader {
   @Column({ default: 0 })
   votersGoal: number;
 
+  @Column({ type: 'date', nullable: true })
+  birthDate: Date;
+
   @Column({ default: true })
   active: boolean;
 
