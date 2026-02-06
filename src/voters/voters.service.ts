@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Voter } from './voter.entity';
@@ -23,7 +23,7 @@ export class VotersService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     private geocodingService: GeocodingService,
-  ) {}
+  ) { }
 
   async create(voterData: Partial<Voter>, currentUser: CurrentUserData): Promise<Voter> {
     try {
@@ -40,6 +40,32 @@ export class VotersService {
       } else {
         // Vereador/Assessor/Liderança usa seu próprio vereadorId
         vereadorId = currentUser.vereadorId;
+      }
+
+      // ============================================
+      // VERIFICAÇÃO DE DUPLICIDADE: nome + data de nascimento
+      // ============================================
+      if (voterData.name && voterData.birthDate) {
+        const normalizedName = voterData.name.trim().toLowerCase();
+
+        const existingVoter = await this.votersRepository
+          .createQueryBuilder('voter')
+          .where('voter.vereadorId = :vereadorId', { vereadorId })
+          .andWhere('LOWER(TRIM(voter.name)) = :name', { name: normalizedName })
+          .andWhere('voter.birthDate = :birthDate', { birthDate: voterData.birthDate })
+          .getOne();
+
+        if (existingVoter) {
+          this.logger.warn(
+            `Eleitor duplicado detectado: "${voterData.name}" (${voterData.birthDate}) já existe com ID ${existingVoter.id}`,
+          );
+          throw new ConflictException({
+            message: `Já existe um eleitor cadastrado com o nome "${existingVoter.name}" e a mesma data de nascimento.`,
+            existingVoterId: existingVoter.id,
+            existingVoterName: existingVoter.name,
+            existingLeaderId: existingVoter.leaderId,
+          });
+        }
       }
 
       // Geocodificar endereço se os campos necessários estiverem presentes
