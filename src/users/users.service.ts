@@ -41,15 +41,23 @@ export class UsersService {
     }
 
     // Check if user already exists
+    const whereConditions: any[] = [{ email: userData.email }];
+
+    // Só verifica duplicidade de CPF se foi informado
+    if (userData.cpf && userData.cpf.trim() !== '') {
+      whereConditions.push({ cpf: userData.cpf });
+    }
+
     const existingUser = await this.usersRepository.findOne({
-      where: [
-        { email: userData.email },
-        { cpf: userData.cpf },
-      ],
+      where: whereConditions,
     });
 
     if (existingUser) {
-      throw new ConflictException('Usuário com este email ou CPF já existe');
+      // Mensagem mais específica
+      if (existingUser.email === userData.email) {
+        throw new ConflictException('Já existe um usuário com este email');
+      }
+      throw new ConflictException('Já existe um usuário com este CPF');
     }
 
     // Hash password
@@ -176,7 +184,7 @@ export class UsersService {
       } else if (viewerRole === UserRole.ASSESSOR) {
         // Assessor só pode ver lideranças do seu vereador ou a si mesmo
         if (user.id !== currentUser.userId &&
-            (user.vereadorId !== currentUser.vereadorId || user.role !== UserRole.LIDERANCA)) {
+          (user.vereadorId !== currentUser.vereadorId || user.role !== UserRole.LIDERANCA)) {
           throw new ForbiddenException('Acesso negado a este usuário');
         }
       } else if (viewerRole === UserRole.LIDERANCA) {
