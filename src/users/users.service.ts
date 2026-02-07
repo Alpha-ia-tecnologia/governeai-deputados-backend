@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { User, UserRole } from './user.entity';
 import { Leader } from '../leaders/leader.entity';
+import { Voter } from '../voters/voter.entity';
 import { CurrentUserData } from '../common/decorators/current-user.decorator';
 import * as bcrypt from 'bcrypt';
 
@@ -26,6 +27,8 @@ export class UsersService {
     private usersRepository: Repository<User>,
     @InjectRepository(Leader)
     private leadersRepository: Repository<Leader>,
+    @InjectRepository(Voter)
+    private votersRepository: Repository<Voter>,
   ) { }
 
   async create(userData: Partial<User>, currentUser: CurrentUserData): Promise<User> {
@@ -263,6 +266,7 @@ export class UsersService {
     }
 
     // Remove vereadorId do update para não permitir alteração (exceto admin)
+    // MAS permitimos se for admin mudando o vereadorId de uma liderança
     if (editorRole !== UserRole.ADMIN) {
       delete (userData as any).vereadorId;
     }
@@ -272,6 +276,29 @@ export class UsersService {
 
     // Se o usuário é LIDERANCA, sincroniza com a tabela leaders
     if (updatedUser.role === UserRole.LIDERANCA) {
+      // Se vereadorId foi alterado (e existe), propaga para os eleitores
+      // Isso deve acontecer ANTES de sincronizar o Leader, ou durante
+      if (userData.vereadorId) {
+        // Encontrar o Leader vinculado
+        const leader = await this.leadersRepository.findOne({
+          where: { userId: updatedUser.id }
+        });
+
+        if (leader) {
+          // Atualiza o vereadorId do Leader
+          leader.vereadorId = userData.vereadorId;
+          await this.leadersRepository.save(leader);
+
+          // Atualiza TODOS os eleitores deste Leader para o novo vereador
+          await this.votersRepository.update(
+            { leaderId: leader.id },
+            { vereadorId: userData.vereadorId }
+          );
+
+          console.log(`[UsersService] Migrados eleitores da liderança ${leader.name} para vereador ${userData.vereadorId}`);
+        }
+      }
+
       await this.syncLeaderWithUser(updatedUser);
     }
 
