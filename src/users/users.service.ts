@@ -65,6 +65,11 @@ export class UsersService {
       userData.password = await bcrypt.hash(userData.password, 10);
     }
 
+    // Convert empty CPF to null to avoid unique constraint violation
+    if (userData.cpf === '') {
+      userData.cpf = null;
+    }
+
     // Define o vereadorId baseado em quem está criando
     if (creatorRole === UserRole.ADMIN) {
       // Admin pode especificar qualquer vereadorId ou deixar null
