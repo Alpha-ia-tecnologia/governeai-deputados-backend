@@ -16,18 +16,9 @@ async function bootstrap() {
         const leadersRepository = app.get<Repository<Leader>>(getRepositoryToken(Leader));
         const votersRepository = app.get<Repository<Voter>>(getRepositoryToken(Voter));
 
-        console.log('🔄 Iniciando migração para Vereador Francisco...');
+        console.log('🔄 Iniciando migração COMPLETA para Vereador Francisco...');
 
-        // 1. Encontrar o vereador Francisco
-        const francisco = await usersRepository.findOne({
-            where: {
-                role: UserRole.VEREADOR,
-                // Busca case insensitive (aproximada) ou pegar o primeiro vereador se não achar
-                // Como o usuário disse "Francisco", vamos tentar achar por nome
-            }
-        });
-
-        // Buscar todos os vereadores para filtrar manualmente (TypeOrm ILIKE as vezes varia com o driver)
+        // 1. Encontrar o vereador Francisco via banco (para garantir ID correto)
         const allVereadores = await usersRepository.find({ where: { role: UserRole.VEREADOR } });
         const targetVereador = allVereadores.find(v => v.name.toLowerCase().includes('francisco'));
 
@@ -43,47 +34,44 @@ async function bootstrap() {
         const allLeaders = await usersRepository.find({ where: { role: UserRole.LIDERANCA } });
         console.log(`📊 Total de lideranças encontradas: ${allLeaders.length}`);
 
-        let votersMigrated = 0;
         let leadersMigrated = 0;
 
         for (const leaderUser of allLeaders) {
-            // Pular se já é do Francisco
-            if (leaderUser.vereadorId === targetVereador.id) {
-                continue;
+            // Mesmo se já for do Francisco, verificamos se o Leader entity está sincronizado
+            // Mas o foco principal é mover quem NÃO é
+            if (leaderUser.vereadorId !== targetVereador.id) {
+                console.log(`Migrando Liderança: ${leaderUser.name}...`);
+                leaderUser.vereadorId = targetVereador.id;
+                await usersRepository.save(leaderUser);
+                leadersMigrated++;
             }
-
-            console.log(`Migrando Liderança: ${leaderUser.name}...`);
-
-            // Atualizar User Lideranca
-            leaderUser.vereadorId = targetVereador.id;
-            await usersRepository.save(leaderUser);
 
             // Atualizar Entity Leader
             const leaderEntity = await leadersRepository.findOne({ where: { userId: leaderUser.id } });
-            if (leaderEntity) {
+            if (leaderEntity && leaderEntity.vereadorId !== targetVereador.id) {
                 leaderEntity.vereadorId = targetVereador.id;
                 await leadersRepository.save(leaderEntity);
-
-                // Atualizar Eleitores deste Leader
-                const votersUpdateResult = await votersRepository.update(
-                    { leaderId: leaderEntity.id },
-                    { vereadorId: targetVereador.id }
-                );
-
-                const count = votersUpdateResult.affected || 0;
-                votersMigrated += count;
-                leadersMigrated++;
-
-                console.log(`  -> Migrada para Francisco. ${count} eleitores atualizados.`);
             }
         }
+
+        // 3. Migrar TODOS os eleitores (mesmo os sem liderança ou de outros vereadores)
+        // Usando QueryBuilder para ser eficiente e garantir que pegue TODOS
+        console.log('\n🔄 Migrando TODOS os eleitores da base para Francisco...');
+
+        const result = await votersRepository.createQueryBuilder()
+            .update(Voter)
+            .set({ vereadorId: targetVereador.id })
+            .where("vereadorId != :id OR vereadorId IS NULL", { id: targetVereador.id })
+            .execute();
+
+        const votersMigrated = result.affected || 0;
 
         console.log('\n==========================================');
         console.log('🚀 MIGRAÇÃO CONCLUÍDA COM SUCESSO');
         console.log('==========================================');
         console.log(`👤 Vereador Destino: ${targetVereador.name}`);
-        console.log(`👥 Lideranças migradas: ${leadersMigrated}`);
-        console.log(`🗳️ Eleitores migrados: ${votersMigrated}`);
+        console.log(`👥 Lideranças migradas ou verificadas: ${leadersMigrated}`);
+        console.log(`🗳️ Total de eleitores migrados (incluindo órfãos): ${votersMigrated}`);
         console.log('==========================================\n');
 
     } catch (error) {
