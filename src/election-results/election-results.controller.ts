@@ -164,4 +164,14 @@ export class ElectionResultsController {
         await this.electionResultsService.clearAll();
         return { message: 'Todos os dados foram removidos' };
     }
+
+    @Post('seed-deputado')
+    async seedDeputadoData() {
+        this.logger.log('Iniciando seed de dados de Deputado Estadual via API...');
+        const result = await this.electionResultsService.seedDeputadoData();
+        return {
+            message: `Seed concluído: ${result.inserted} registros inseridos para ${result.candidates} candidatos de Deputado Estadual`,
+            ...result,
+        };
+    }
 }

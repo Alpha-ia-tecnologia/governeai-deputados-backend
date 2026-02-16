@@ -636,4 +636,107 @@ export class ElectionResultsService {
     async clearAll(): Promise<void> {
         await this.electionResultRepository.clear();
     }
+
+    // ========== SEED DE DADOS DE DEPUTADO ESTADUAL ==========
+    async seedDeputadoData(): Promise<{ inserted: number; candidates: number }> {
+        this.logger.log('Iniciando seed de dados de Deputado Estadual...');
+
+        // Remover dados anteriores de Deputado Estadual
+        await this.electionResultRepository
+            .createQueryBuilder()
+            .delete()
+            .where('position = :position', { position: 'Deputado Estadual' })
+            .execute();
+
+        const deputadoData = [
+            { candidateNumber: '40000', candidateName: 'ADELMO SOARES', partyNumber: '40', partyAcronym: 'PSB', partyName: 'PARTIDO SOCIALISTA BRASILEIRO', votes: 34127 },
+            { candidateNumber: '40123', candidateName: 'WELLINGTON DO CURSO', partyNumber: '40', partyAcronym: 'PSB', partyName: 'PARTIDO SOCIALISTA BRASILEIRO', votes: 48932 },
+            { candidateNumber: '13456', candidateName: 'YGLÉSIO MOYSES', partyNumber: '13', partyAcronym: 'PT', partyName: 'PARTIDO DOS TRABALHADORES', votes: 42815 },
+            { candidateNumber: '15789', candidateName: 'FERNANDO PESSOA', partyNumber: '15', partyAcronym: 'MDB', partyName: 'MOVIMENTO DEMOCRÁTICO BRASILEIRO', votes: 39456 },
+            { candidateNumber: '22111', candidateName: 'MARCOS CALDAS', partyNumber: '22', partyAcronym: 'PL', partyName: 'PARTIDO LIBERAL', votes: 36890 },
+            { candidateNumber: '55222', candidateName: 'OTHELINO NETO', partyNumber: '55', partyAcronym: 'PSD', partyName: 'PARTIDO SOCIAL DEMOCRÁTICO', votes: 35214 },
+            { candidateNumber: '11333', candidateName: 'CÁSSIO PALHANO', partyNumber: '11', partyAcronym: 'PP', partyName: 'PROGRESSISTAS', votes: 33876 },
+            { candidateNumber: '10444', candidateName: 'DUARTE JUNIOR', partyNumber: '10', partyAcronym: 'REPUBLICANOS', partyName: 'REPUBLICANOS', votes: 31245 },
+            { candidateNumber: '44555', candidateName: 'ROBERTO COSTA', partyNumber: '44', partyAcronym: 'UNIÃO', partyName: 'UNIÃO BRASIL', votes: 29876 },
+            { candidateNumber: '20666', candidateName: 'LEVI PONTES', partyNumber: '20', partyAcronym: 'PODE', partyName: 'PODEMOS', votes: 27543 },
+            { candidateNumber: '65777', candidateName: 'ANA REGINA SOUSA', partyNumber: '65', partyAcronym: 'PCdoB', partyName: 'PARTIDO COMUNISTA DO BRASIL', votes: 25890 },
+            { candidateNumber: '12888', candidateName: 'JOSUÉ RAMOS', partyNumber: '12', partyAcronym: 'PDT', partyName: 'PARTIDO DEMOCRÁTICO TRABALHISTA', votes: 23456 },
+            { candidateNumber: '43999', candidateName: 'MARCOS VINÍCIUS SILVA', partyNumber: '43', partyAcronym: 'PV', partyName: 'PARTIDO VERDE', votes: 19876 },
+            { candidateNumber: '50111', candidateName: 'ILMA GUIMARÃES', partyNumber: '50', partyAcronym: 'PSOL', partyName: 'PARTIDO SOCIALISMO E LIBERDADE', votes: 16543 },
+            { candidateNumber: '70222', candidateName: 'MARCOS AURÉLIO RAMOS', partyNumber: '70', partyAcronym: 'AVANTE', partyName: 'AVANTE', votes: 14321 },
+            { candidateNumber: '33333', candidateName: 'PEDRO LUCAS FERNANDES', partyNumber: '33', partyAcronym: 'PMN', partyName: 'PARTIDO DA MOBILIZAÇÃO NACIONAL', votes: 11234 },
+            { candidateNumber: '77444', candidateName: 'RITA BARROS', partyNumber: '77', partyAcronym: 'SOLID', partyName: 'SOLIDARIEDADE', votes: 8765 },
+            { candidateNumber: '36555', candidateName: 'JORGE CARVALHO', partyNumber: '36', partyAcronym: 'AGIR', partyName: 'AGIR', votes: 6543 },
+            { candidateNumber: '30666', candidateName: 'ANTÔNIO BRITO NETO', partyNumber: '30', partyAcronym: 'NOVO', partyName: 'PARTIDO NOVO', votes: 4321 },
+        ];
+
+        const electionYear = 2022;
+        const round = 1;
+        const municipality = this.defaultMunicipality;
+        const state = 'PI';
+        const zones = [3, 4]; // Mesmas zonas do município
+        const sectionsPerZone = 100;
+
+        let totalRecords = 0;
+        const batch: Partial<ElectionResult>[] = [];
+
+        for (const candidate of deputadoData) {
+            let remainingVotes = candidate.votes;
+
+            // Adelmo Soares: forte na zona 3 (55%/45%), outros: variação
+            const zoneWeight = candidate.candidateNumber === '40000' ? 0.55 : (0.40 + Math.random() * 0.20);
+
+            for (let zi = 0; zi < zones.length; zi++) {
+                const zone = zones[zi];
+                const zoneVotes = zi === 0
+                    ? Math.floor(candidate.votes * zoneWeight)
+                    : candidate.votes - Math.floor(candidate.votes * zoneWeight);
+
+                const numSections = Math.floor(sectionsPerZone * (0.3 + Math.random() * 0.4));
+                let sectionRemaining = zi === 0 ? Math.floor(candidate.votes * zoneWeight) : zoneVotes;
+
+                for (let s = 1; s <= numSections && sectionRemaining > 0; s++) {
+                    const sectionVotes = s === numSections
+                        ? sectionRemaining
+                        : Math.max(1, Math.floor(sectionRemaining / (numSections - s + 1) * (0.3 + Math.random() * 1.4)));
+
+                    const actualVotes = Math.min(sectionVotes, sectionRemaining);
+                    if (actualVotes <= 0) continue;
+
+                    batch.push({
+                        electionYear,
+                        round,
+                        zone,
+                        section: s,
+                        position: 'Deputado Estadual',
+                        candidateNumber: candidate.candidateNumber,
+                        candidateName: candidate.candidateName,
+                        partyNumber: candidate.partyNumber,
+                        partyAcronym: candidate.partyAcronym,
+                        partyName: candidate.partyName,
+                        votes: actualVotes,
+                        municipality,
+                        state,
+                    });
+
+                    sectionRemaining -= actualVotes;
+                    totalRecords++;
+
+                    // Salvar em lotes de 500
+                    if (batch.length >= 500) {
+                        await this.electionResultRepository.save(batch);
+                        batch.length = 0;
+                    }
+                }
+            }
+        }
+
+        // Salvar registros restantes
+        if (batch.length > 0) {
+            await this.electionResultRepository.save(batch);
+        }
+
+        this.logger.log(`Seed concluído: ${totalRecords} registros de Deputado Estadual inseridos para ${deputadoData.length} candidatos`);
+        return { inserted: totalRecords, candidates: deputadoData.length };
+    }
 }

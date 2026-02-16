@@ -12,6 +12,16 @@ import { AmendmentsModule } from './amendments/amendments.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { MigrationModule } from './migration/migration.module';
 import { ElectionResultsModule } from './election-results/election-results.module';
+import { CitiesModule } from './cities/cities.module';
+import { ExecutiveRequestsModule } from './executive-requests/executive-requests.module';
+import { AiModule } from './ai/ai.module';
+import { StaffModule } from './staff/staff.module';
+import { TasksModule } from './tasks/tasks.module';
+import { BillsModule } from './bills/bills.module';
+import { VotingRecordsModule } from './voting-records/voting-records.module';
+import { PoliticalContactsModule } from './political-contacts/political-contacts.module';
+import { CeapModule } from './ceap/ceap.module';
+import { AuditLogModule } from './audit-log/audit-log.module';
 import { getDatabaseConfig } from './config/database.config';
 
 @Module({
@@ -32,6 +42,16 @@ import { getDatabaseConfig } from './config/database.config';
     AppointmentsModule,
     MigrationModule,
     ElectionResultsModule,
+    CitiesModule,
+    ExecutiveRequestsModule,
+    AiModule,
+    StaffModule,
+    TasksModule,
+    BillsModule,
+    VotingRecordsModule,
+    PoliticalContactsModule,
+    CeapModule,
+    AuditLogModule,
   ],
 })
 export class AppModule { }
