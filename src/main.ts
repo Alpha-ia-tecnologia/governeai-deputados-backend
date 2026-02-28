@@ -10,9 +10,23 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  // Enable CORS - Accept all origins dynamically
+  // CORS seguro - whitelist via variável de ambiente
+  const allowedOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map(o => o.trim())
+    : null;
+
   app.enableCors({
-    origin: true, // Reflects the request origin, works with credentials
+    origin: allowedOrigins
+      ? (origin, callback) => {
+        // Permitir requests sem origin (mobile apps, curl, etc)
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+        } else {
+          console.warn(`⛔ CORS bloqueado para origin: ${origin}`);
+          callback(new Error('Não permitido pelo CORS'));
+        }
+      }
+      : true, // Dev: aceita qualquer origin
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning'],
     credentials: true,
