@@ -32,7 +32,7 @@ export class HelpRecord {
   @JoinColumn({ name: 'voterId' })
   voter: Voter;
 
-  @Column()
+  @Column({ nullable: true })
   leaderId: string;
 
   @ManyToOne(() => Leader, { eager: true })
@@ -42,10 +42,12 @@ export class HelpRecord {
   @Column({
     type: 'enum',
     enum: HelpCategory,
+    default: HelpCategory.OUTROS,
+    nullable: true,
   })
   category: HelpCategory;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', nullable: true })
   description: string;
 
   @Column({
@@ -55,7 +57,7 @@ export class HelpRecord {
   })
   status: HelpStatus;
 
-  @Column()
+  @Column({ nullable: true })
   responsibleId: string;
 
   @ManyToOne(() => User, { eager: true })

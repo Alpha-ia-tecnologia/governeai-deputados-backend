@@ -64,6 +64,22 @@ export class Voter {
   @Column({ type: 'text', nullable: true })
   notes: string;
 
+  // Campos do Gabinete Social
+  @Column({ nullable: true })
+  zona: string;
+
+  @Column({ nullable: true })
+  localidade: string;
+
+  @Column({ nullable: true })
+  tipoSuporte: string;
+
+  @Column({ nullable: true })
+  articulador: string;
+
+  @Column({ type: 'int', nullable: true })
+  idade: number;
+
   // Multitenancy: referência ao vereador dono deste registro
   // Nullable para permitir migração de dados existentes
   @Column({ nullable: true })
