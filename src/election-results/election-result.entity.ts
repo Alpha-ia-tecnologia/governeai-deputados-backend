@@ -43,10 +43,10 @@ export class ElectionResult {
     votes: number; // QT_VOTOS
 
     // Campos extras para contexto
-    @Column({ default: 'PARNAÍBA' })
+    @Column({ default: 'MARANHÃO' })
     municipality: string;
 
-    @Column({ default: 'PI' })
+    @Column({ default: 'MA' })
     state: string;
 
     @CreateDateColumn()
