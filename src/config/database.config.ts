@@ -1,14 +1,16 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 
 export const getDatabaseConfig = (): TypeOrmModuleOptions => {
+  const isProduction = process.env.NODE_ENV === 'production';
+
   // Se DATABASE_URL estiver definida via env, usar ela (deploy override)
   if (process.env.DATABASE_URL) {
     return {
       type: 'postgres',
       url: process.env.DATABASE_URL,
       entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-      synchronize: true,
-      logging: process.env.NODE_ENV === 'development',
+      synchronize: !isProduction, // false em produção para segurança
+      logging: !isProduction,
       ssl: process.env.DATABASE_SSL === 'true'
         ? { rejectUnauthorized: false }
         : false,
@@ -26,8 +28,8 @@ export const getDatabaseConfig = (): TypeOrmModuleOptions => {
     password: process.env.DATABASE_PASSWORD || 'T1fpOr8Kw7KQEpU781gm9NWy7',
     database: process.env.DATABASE_NAME || 'governe-deputado',
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-    synchronize: true,
-    logging: process.env.NODE_ENV === 'development',
+    synchronize: !isProduction, // false em produção para segurança
+    logging: !isProduction,
     ssl: false,
   };
 };
