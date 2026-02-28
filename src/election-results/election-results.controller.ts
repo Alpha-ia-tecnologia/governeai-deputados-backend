@@ -238,14 +238,14 @@ export class ElectionResultsController {
 
     @Post('ai/simulate')
     async aiSimulate(@Body() body: {
-        candidateName: string;
+        candidate: string;
         party: string;
         currentVotes: number;
         scenario: string;
         scenarioDetails: string;
         topCities: { name: string; votes: number }[];
     }) {
-        this.logger.log(`IA: Simulando cenário "${body.scenario}" para ${body.candidateName}`);
+        this.logger.log(`IA: Simulando cenário "${body.scenario}" para ${body.candidate}`);
         return this.deepseekAiService.simulateScenario(body);
     }
 
