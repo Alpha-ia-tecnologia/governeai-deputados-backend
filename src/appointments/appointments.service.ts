@@ -10,7 +10,7 @@ export class AppointmentsService {
   constructor(
     @InjectRepository(Appointment)
     private appointmentsRepository: Repository<Appointment>,
-  ) {}
+  ) { }
 
   async create(appointmentData: Partial<Appointment>, currentUser: CurrentUserData): Promise<any> {
     try {
@@ -31,11 +31,8 @@ export class AppointmentsService {
       let vereadorId: string;
 
       if (currentUser.role === UserRole.ADMIN) {
-        // Admin DEVE especificar o vereadorId
-        if (!appointmentData.vereadorId) {
-          throw new BadRequestException('Admin deve especificar o vereadorId ao criar um compromisso');
-        }
-        vereadorId = appointmentData.vereadorId;
+        // Admin pode especificar o vereadorId, mas não é obrigatório
+        vereadorId = appointmentData.vereadorId || currentUser.vereadorId || null;
       } else {
         // Vereador/Assessor usa seu próprio vereadorId
         vereadorId = currentUser.vereadorId;
