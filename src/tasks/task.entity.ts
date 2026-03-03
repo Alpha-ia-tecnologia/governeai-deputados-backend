@@ -55,6 +55,9 @@ export class GabineteTask {
     @Column({ type: 'text', nullable: true })
     notes: string;
 
+    @Column({ nullable: true })
+    color: string;
+
     // Multitenancy
     @Column({ nullable: true })
     @Index()

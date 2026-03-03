@@ -13,13 +13,10 @@ export class TasksService {
     ) { }
 
     async create(data: Partial<GabineteTask>, currentUser: CurrentUserData): Promise<GabineteTask> {
-        let vereadorId: string;
+        let vereadorId: string | null;
 
         if (currentUser.role === UserRole.ADMIN) {
-            if (!data.vereadorId) {
-                throw new BadRequestException('Admin deve especificar o vereadorId');
-            }
-            vereadorId = data.vereadorId;
+            vereadorId = data.vereadorId || currentUser.vereadorId || null;
         } else {
             vereadorId = currentUser.vereadorId;
         }
