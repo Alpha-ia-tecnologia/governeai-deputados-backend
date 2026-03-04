@@ -22,6 +22,7 @@ import { VotingRecordsModule } from './voting-records/voting-records.module';
 import { PoliticalContactsModule } from './political-contacts/political-contacts.module';
 import { CeapModule } from './ceap/ceap.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
+import { ChatModule } from './chat/chat.module';
 import { getDatabaseConfig } from './config/database.config';
 
 @Module({
@@ -52,6 +53,7 @@ import { getDatabaseConfig } from './config/database.config';
     PoliticalContactsModule,
     CeapModule,
     AuditLogModule,
+    ChatModule,
   ],
 })
 export class AppModule { }
