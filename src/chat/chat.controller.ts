@@ -121,7 +121,7 @@ export class ChatController {
         }),
         limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
     }))
-    async uploadFile(@UploadedFile() file: Express.Multer.File) {
+    async uploadFile(@UploadedFile() file: any) {
         this.logger.log(`File uploaded: ${file.originalname} -> ${file.filename}`);
         return {
             url: `/uploads/chat/${file.filename}`,
