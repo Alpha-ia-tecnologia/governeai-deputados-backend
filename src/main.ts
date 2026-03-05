@@ -2,6 +2,15 @@
 import * as dotenv from 'dotenv';
 dotenv.config();
 
+// Custom DNS resolution for Docker containers that can't resolve external hostnames
+if (process.env.DNS_SERVERS) {
+  const dns = require('dns');
+  const servers = process.env.DNS_SERVERS.split(',').map((s: string) => s.trim());
+  dns.setServers(servers);
+  console.log(`🌐 DNS customizado configurado: ${servers.join(', ')}`);
+}
+
+
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
