@@ -1,0 +1,9 @@
+export { WhatsappContact } from './whatsapp-contact.entity';
+export { WhatsappConversation, ConversationStatus } from './whatsapp-conversation.entity';
+export { WhatsappMessage, MessageDirection, MessageType, DeliveryStatus } from './whatsapp-message.entity';
+export { WhatsappTemplate, TemplateCategory, TemplateStatus } from './whatsapp-template.entity';
+export { WhatsappLabel } from './whatsapp-label.entity';
+export { WhatsappInternalNote } from './whatsapp-internal-note.entity';
+export { WhatsappBotFlow, BotFlowStatus, BotStepType } from './whatsapp-bot-flow.entity';
+export { WhatsappSettings } from './whatsapp-settings.entity';
+export { WhatsappChannel, ChannelStatus } from './whatsapp-channel.entity';

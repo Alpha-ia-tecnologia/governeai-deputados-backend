@@ -23,6 +23,7 @@ import { PoliticalContactsModule } from './political-contacts/political-contacts
 import { CeapModule } from './ceap/ceap.module';
 import { AuditLogModule } from './audit-log/audit-log.module';
 import { ChatModule } from './chat/chat.module';
+import { WhatsappModule } from './whatsapp/whatsapp.module';
 import { getDatabaseConfig } from './config/database.config';
 
 @Module({
@@ -54,6 +55,7 @@ import { getDatabaseConfig } from './config/database.config';
     CeapModule,
     AuditLogModule,
     ChatModule,
+    WhatsappModule,
   ],
 })
 export class AppModule { }
