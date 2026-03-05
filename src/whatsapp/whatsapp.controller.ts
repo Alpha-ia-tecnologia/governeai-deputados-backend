@@ -105,6 +105,9 @@ export class WhatsappController {
         @Query('limit') limit = 50,
         @Query('offset') offset = 0,
     ) {
+        if (conversationId.startsWith('evo_')) {
+            return []; // Evolution messages fetched via /evolution/chats/:id/messages
+        }
         return this.coreService.getConversationMessages(conversationId, +limit, +offset);
     }
 
@@ -117,6 +120,9 @@ export class WhatsappController {
         @Request() req: any,
     ) {
         if (!content?.trim()) throw new BadRequestException('Conteúdo da mensagem é obrigatório');
+        if (conversationId.startsWith('evo_')) {
+            throw new BadRequestException('Use o endpoint /evolution/send para conversas Evolution API');
+        }
         return this.coreService.sendMessage(conversationId, content, req.user.id);
     }
 
@@ -124,6 +130,9 @@ export class WhatsappController {
     @UseGuards(JwtAuthGuard)
     @Get('conversations/:id/window-status')
     async getWindowStatus(@Param('id') conversationId: string) {
+        if (conversationId.startsWith('evo_')) {
+            return { is24hWindowOpen: true, lastClientMessageAt: new Date().toISOString() };
+        }
         const conversation = await this.coreService.getConversationById(conversationId);
         if (!conversation) throw new BadRequestException('Conversa não encontrada');
         return {
@@ -139,6 +148,9 @@ export class WhatsappController {
         @Param('id') conversationId: string,
         @Body('assignedToId') assignedToId: string,
     ) {
+        if (conversationId.startsWith('evo_')) {
+            return { id: conversationId, assignedToId, status: 'active' };
+        }
         return this.coreService.assignConversation(conversationId, assignedToId);
     }
 
@@ -149,6 +161,9 @@ export class WhatsappController {
         @Param('id') conversationId: string,
         @Request() req: any,
     ) {
+        if (conversationId.startsWith('evo_')) {
+            return { id: conversationId, assignedToId: req.user.id, status: 'active' };
+        }
         return this.coreService.assignConversation(conversationId, req.user.id);
     }
 
@@ -160,6 +175,9 @@ export class WhatsappController {
         @Body() body: { targetUserId: string; internalNote?: string },
         @Request() req: any,
     ) {
+        if (conversationId.startsWith('evo_')) {
+            return { id: conversationId, assignedToId: body.targetUserId, status: 'active' };
+        }
         return this.coreService.transferConversation(
             conversationId,
             body.targetUserId,
@@ -175,6 +193,9 @@ export class WhatsappController {
         @Param('id') conversationId: string,
         @Request() req: any,
     ) {
+        if (conversationId.startsWith('evo_')) {
+            return { id: conversationId, status: 'resolved', resolvedAt: new Date().toISOString() };
+        }
         return this.coreService.resolveConversation(conversationId, req.user.id);
     }
 
