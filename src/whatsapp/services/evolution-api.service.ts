@@ -9,6 +9,10 @@ import axios from 'axios';
 export class EvolutionApiService {
     private readonly logger = new Logger(EvolutionApiService.name);
 
+    // Cache for inbound message content (Evolution API doesn't return body for received messages)
+    // Key: messageId (key.id), Value: { content, type, messageTimestamp, fromMe, remoteJid }
+    private inboundCache = new Map<string, { content: string; type: string; timestamp: number; remoteJid: string }>();
+
     constructor(
         @InjectRepository(WhatsappSettings)
         private readonly settingsRepo: Repository<WhatsappSettings>,
@@ -254,7 +258,10 @@ export class EvolutionApiService {
 
             return records.map((msg: any, index: number) => {
                 const isFromMe = msg.key?.fromMe || false;
-                const content = msg.message?.conversation
+                const messageId = msg.key?.id;
+
+                // Try to get content from the message object (works for outbound)
+                let content = msg.message?.conversation
                     || msg.message?.extendedTextMessage?.text
                     || msg.message?.imageMessage?.caption
                     || msg.message?.videoMessage?.caption
@@ -267,6 +274,14 @@ export class EvolutionApiService {
                     || (msg.message?.locationMessage ? '📍 Localização' : '')
                     || '';
 
+                // For inbound messages with message: null, try to get from cache
+                if (!content && !isFromMe && messageId) {
+                    const cached = this.inboundCache.get(messageId);
+                    if (cached) {
+                        content = cached.content;
+                    }
+                }
+
                 // Use messageType from the top-level field or detect from message content
                 let type: string = 'text';
                 const msgType = msg.messageType || '';
@@ -277,6 +292,18 @@ export class EvolutionApiService {
                 else if (msgType === 'stickerMessage' || msg.message?.stickerMessage) type = 'sticker';
                 else if (msgType === 'locationMessage' || msg.message?.locationMessage) type = 'location';
                 else if (msgType === 'contactMessage' || msg.message?.contactMessage) type = 'contact';
+
+                // For unknown inbound messages with no content, use type label
+                if (!content && !isFromMe) {
+                    if (type === 'image') content = '📷 Imagem';
+                    else if (type === 'audio') content = '🎵 Áudio';
+                    else if (type === 'video') content = '🎥 Vídeo';
+                    else if (type === 'document') content = '📄 Documento';
+                    else if (type === 'sticker') content = '🏷️ Sticker';
+                    else if (type === 'contact') content = '👤 Contato';
+                    else if (type === 'location') content = '📍 Localização';
+                    else content = '💬 Mensagem recebida';
+                }
 
                 const timestamp = msg.messageTimestamp
                     ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
@@ -307,6 +334,74 @@ export class EvolutionApiService {
             this.logger.error(`Erro ao buscar mensagens: ${error.message}`);
             return [];
         }
+    }
+
+    // ─── Webhook Handler ───
+
+    handleIncomingWebhook(body: any): void {
+        try {
+            const event = body.event;
+            const data = body.data;
+            const instance = body.instance;
+
+            if (event === 'messages.upsert' && data) {
+                const key = data.key;
+                const messageId = key?.id;
+                const fromMe = key?.fromMe || false;
+                const remoteJid = key?.remoteJid || '';
+
+                if (!fromMe && messageId && remoteJid.endsWith('@s.whatsapp.net')) {
+                    // Extract content from webhook data
+                    const msg = data.message;
+                    const content = msg?.conversation
+                        || msg?.extendedTextMessage?.text
+                        || msg?.imageMessage?.caption
+                        || msg?.videoMessage?.caption
+                        || msg?.documentMessage?.fileName
+                        || (msg?.audioMessage ? '🎵 Áudio' : '')
+                        || (msg?.imageMessage ? '📷 Imagem' : '')
+                        || (msg?.videoMessage ? '🎥 Vídeo' : '')
+                        || (msg?.stickerMessage ? '🏷️ Sticker' : '')
+                        || (msg?.contactMessage ? '👤 Contato' : '')
+                        || (msg?.locationMessage ? '📍 Localização' : '')
+                        || '💬 Mensagem';
+
+                    const timestamp = data.messageTimestamp || Math.floor(Date.now() / 1000);
+
+                    this.inboundCache.set(messageId, {
+                        content,
+                        type: data.messageType || 'conversation',
+                        timestamp,
+                        remoteJid,
+                    });
+
+                    this.logger.log(`📥 Cached inbound msg ${messageId} from ${remoteJid}: ${content.substring(0, 30)}`);
+
+                    // Limit cache size to 5000 entries
+                    if (this.inboundCache.size > 5000) {
+                        const first = this.inboundCache.keys().next().value;
+                        if (first) this.inboundCache.delete(first);
+                    }
+                }
+            }
+        } catch (error: any) {
+            this.logger.error(`Erro ao processar webhook: ${error.message}`);
+        }
+    }
+
+    async configureWebhook(vereadorId: string, webhookUrl: string): Promise<any> {
+        const channel = await this.getFirstConnectedChannel(vereadorId);
+        if (!channel) throw new BadRequestException('Nenhum canal conectado');
+
+        return this.request(vereadorId, 'post', `/webhook/set/${channel.instanceName}`, {
+            webhook: {
+                enabled: true,
+                url: webhookUrl,
+                webhookByEvents: false,
+                webhookBase64: false,
+                events: ['MESSAGES_UPSERT'],
+            },
+        });
     }
 
     async sendTextMessage(vereadorId: string, instanceName: string, remoteJid: string, text: string): Promise<any> {

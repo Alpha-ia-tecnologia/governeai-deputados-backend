@@ -259,4 +259,23 @@ export class WhatsappController {
             createdAt: new Date().toISOString(),
         };
     }
+
+    // ─── Evolution API: Webhook receiver (public - no auth) ───
+    @Post('evolution/webhook')
+    async evolutionWebhook(@Body() body: any) {
+        this.logger.log(`📨 Evolution webhook received: ${body?.event || 'unknown'}`);
+        this.evolutionService.handleIncomingWebhook(body);
+        return { status: 'ok' };
+    }
+
+    // ─── Evolution API: Configure webhook ───
+    @UseGuards(JwtAuthGuard)
+    @Post('evolution/configure-webhook')
+    async configureEvolutionWebhook(
+        @Body() body: { webhookUrl: string },
+        @Request() req: any,
+    ) {
+        const vereadorId = req.user.vereadorId || req.user.id;
+        return this.evolutionService.configureWebhook(vereadorId, body.webhookUrl);
+    }
 }
