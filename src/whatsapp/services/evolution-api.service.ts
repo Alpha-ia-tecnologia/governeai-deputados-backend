@@ -164,16 +164,53 @@ export class EvolutionApiService {
     // ─── Chat / Message Fetching from Evolution API ───
 
     async getFirstConnectedChannel(vereadorId: string): Promise<WhatsappChannel | null> {
+        // 1. Try DB first
         const connected = await this.channelRepo.findOne({
             where: { vereadorId, status: ChannelStatus.CONNECTED },
             order: { createdAt: 'ASC' },
         });
         if (connected) return connected;
-        // Fallback: any channel
-        return this.channelRepo.findOne({
+
+        // 2. Fallback: any channel in DB
+        const anyChannel = await this.channelRepo.findOne({
             where: { vereadorId },
             order: { createdAt: 'ASC' },
         });
+        if (anyChannel) return anyChannel;
+
+        // 3. Auto-discover: query Evolution API for connected instances
+        try {
+            const { baseUrl, apiKey } = await this.getCredentials(vereadorId);
+            const response = await axios.get(`${baseUrl}/instance/fetchInstances`, {
+                headers: { apikey: apiKey },
+                timeout: 10000,
+            });
+            const instances = Array.isArray(response.data) ? response.data : [];
+            // Find any connected instance
+            const openInstance = instances.find((inst: any) =>
+                inst.connectionStatus === 'open' || inst.connectionStatus === 'connected',
+            );
+            const targetInstance = openInstance || instances[0];
+
+            if (targetInstance) {
+                const instanceName = targetInstance.name || targetInstance.instanceName || 'default';
+                this.logger.log(`🔍 Auto-discovered instance: ${instanceName} for vereador ${vereadorId}`);
+
+                // Create DB record automatically
+                const channel = this.channelRepo.create({
+                    vereadorId,
+                    instanceName,
+                    instanceId: targetInstance.id || null,
+                    status: openInstance ? ChannelStatus.CONNECTED : ChannelStatus.CREATED,
+                });
+                const saved = await this.channelRepo.save(channel);
+                return saved;
+            }
+        } catch (error: any) {
+            this.logger.warn(`Auto-discover failed: ${error.message}`);
+        }
+
+        return null;
     }
 
     async fetchChats(vereadorId: string): Promise<any[]> {
