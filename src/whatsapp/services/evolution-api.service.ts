@@ -164,21 +164,7 @@ export class EvolutionApiService {
     // ─── Chat / Message Fetching from Evolution API ───
 
     async getFirstConnectedChannel(vereadorId: string): Promise<WhatsappChannel | null> {
-        // 1. Try DB first
-        const connected = await this.channelRepo.findOne({
-            where: { vereadorId, status: ChannelStatus.CONNECTED },
-            order: { createdAt: 'ASC' },
-        });
-        if (connected) return connected;
-
-        // 2. Fallback: any channel in DB
-        const anyChannel = await this.channelRepo.findOne({
-            where: { vereadorId },
-            order: { createdAt: 'ASC' },
-        });
-        if (anyChannel) return anyChannel;
-
-        // 3. Auto-discover: query Evolution API for connected instances
+        // Always query the Evolution API for live connected instances
         try {
             const { baseUrl, apiKey } = await this.getCredentials(vereadorId);
             const response = await axios.get(`${baseUrl}/instance/fetchInstances`, {
@@ -186,31 +172,52 @@ export class EvolutionApiService {
                 timeout: 10000,
             });
             const instances = Array.isArray(response.data) ? response.data : [];
-            // Find any connected instance
+
+            // Find a connected instance
             const openInstance = instances.find((inst: any) =>
                 inst.connectionStatus === 'open' || inst.connectionStatus === 'connected',
             );
-            const targetInstance = openInstance || instances[0];
+            const targetInstance = openInstance || instances.find((inst: any) => inst.name);
 
             if (targetInstance) {
                 const instanceName = targetInstance.name || targetInstance.instanceName || 'default';
-                this.logger.log(`🔍 Auto-discovered instance: ${instanceName} for vereador ${vereadorId}`);
 
-                // Create DB record automatically
+                // Check if DB has a matching channel
+                const existingChannel = await this.channelRepo.findOne({
+                    where: { vereadorId },
+                    order: { createdAt: 'DESC' },
+                });
+
+                if (existingChannel) {
+                    // Update DB if instance name changed
+                    if (existingChannel.instanceName !== instanceName) {
+                        this.logger.log(`🔄 Instance name changed: ${existingChannel.instanceName} → ${instanceName}`);
+                        existingChannel.instanceName = instanceName;
+                    }
+                    existingChannel.instanceId = targetInstance.id || existingChannel.instanceId;
+                    existingChannel.status = openInstance ? ChannelStatus.CONNECTED : ChannelStatus.DISCONNECTED;
+                    return this.channelRepo.save(existingChannel);
+                }
+
+                // No DB record — create one
+                this.logger.log(`🔍 Auto-discovered instance: ${instanceName} for vereador ${vereadorId}`);
                 const channel = this.channelRepo.create({
                     vereadorId,
                     instanceName,
                     instanceId: targetInstance.id || null,
                     status: openInstance ? ChannelStatus.CONNECTED : ChannelStatus.CREATED,
                 });
-                const saved = await this.channelRepo.save(channel);
-                return saved;
+                return this.channelRepo.save(channel);
             }
         } catch (error: any) {
-            this.logger.warn(`Auto-discover failed: ${error.message}`);
+            this.logger.warn(`Live instance check failed: ${error.message}`);
         }
 
-        return null;
+        // Fallback: use whatever is in DB
+        return this.channelRepo.findOne({
+            where: { vereadorId },
+            order: { createdAt: 'DESC' },
+        });
     }
 
     async fetchChats(vereadorId: string): Promise<any[]> {
