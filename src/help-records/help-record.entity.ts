@@ -50,6 +50,9 @@ export class HelpRecord {
   @Column({ type: 'text', nullable: true })
   description: string;
 
+  @Column({ type: 'date', nullable: true })
+  serviceDate: Date;
+
   @Column({
     type: 'enum',
     enum: HelpStatus,
