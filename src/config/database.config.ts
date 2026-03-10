@@ -9,7 +9,7 @@ export const getDatabaseConfig = (): TypeOrmModuleOptions => {
       type: 'postgres',
       url: process.env.DATABASE_URL,
       entities: [__dirname + '/../**/*.entity{.ts,.js}'],
-      synchronize: !isProduction, // false em produção para segurança
+      synchronize: true, // TEMP: true to create evolution_inbound_messages table
       logging: !isProduction,
       ssl: process.env.DATABASE_SSL === 'true'
         ? { rejectUnauthorized: false }

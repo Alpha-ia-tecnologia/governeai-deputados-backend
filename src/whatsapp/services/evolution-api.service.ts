@@ -3,21 +3,20 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WhatsappSettings } from '../entities/whatsapp-settings.entity';
 import { WhatsappChannel, ChannelStatus } from '../entities/whatsapp-channel.entity';
+import { EvolutionInboundMessage } from '../entities/evolution-inbound-message.entity';
 import axios from 'axios';
 
 @Injectable()
 export class EvolutionApiService {
     private readonly logger = new Logger(EvolutionApiService.name);
 
-    // Cache for inbound message content (Evolution API doesn't return body for received messages)
-    // Key: messageId (key.id), Value: { content, type, messageTimestamp, fromMe, remoteJid }
-    private inboundCache = new Map<string, { content: string; type: string; timestamp: number; remoteJid: string }>();
-
     constructor(
         @InjectRepository(WhatsappSettings)
         private readonly settingsRepo: Repository<WhatsappSettings>,
         @InjectRepository(WhatsappChannel)
         private readonly channelRepo: Repository<WhatsappChannel>,
+        @InjectRepository(EvolutionInboundMessage)
+        private readonly inboundMsgRepo: Repository<EvolutionInboundMessage>,
     ) { }
 
     // ─── Helpers ───
@@ -282,29 +281,83 @@ export class EvolutionApiService {
         }
     }
 
+    private formatMessageOutput(msg: { id: string; fromMe: boolean; content: string | null; type: string; timestamp: number; }, instanceName: string, remoteJid: string, vereadorId: string) {
+        const ts = new Date(msg.timestamp * 1000).toISOString();
+        return {
+            id: msg.id,
+            conversationId: `evo_${instanceName}_${remoteJid.replace('@s.whatsapp.net', '')}`,
+            wamid: msg.id,
+            direction: msg.fromMe ? 'outbound' : 'inbound',
+            type: msg.type,
+            content: msg.content || null,
+            mediaId: null,
+            mediaMimeType: null,
+            mediaLocalPath: null,
+            mediaCaption: null,
+            latitude: null,
+            longitude: null,
+            locationName: null,
+            locationAddress: null,
+            deliveryStatus: msg.fromMe ? 'read' : 'delivered',
+            senderUserId: msg.fromMe ? vereadorId : null,
+            senderUser: null,
+            createdAt: ts,
+        };
+    }
+
     async fetchMessages(vereadorId: string, remoteJid: string, instanceName: string): Promise<any[]> {
+        // Fetch outbound from Evolution API + inbound from our DB in parallel
+        const [apiMessages, dbInbound] = await Promise.all([
+            this.fetchApiMessages(vereadorId, instanceName, remoteJid),
+            this.inboundMsgRepo.find({
+                where: { remoteJid, instanceName },
+                order: { messageTimestamp: 'ASC' },
+                take: 200,
+            }).catch(() => [] as EvolutionInboundMessage[]),
+        ]);
+
+        // Convert API messages
+        const outMessages = apiMessages.map(msg => this.formatMessageOutput(msg, instanceName, remoteJid, vereadorId));
+
+        // Convert DB inbound messages
+        const inMessages = dbInbound.map(msg => this.formatMessageOutput({
+            id: msg.messageId,
+            fromMe: msg.fromMe,
+            content: msg.content,
+            type: msg.messageType === 'conversation' ? 'text' : msg.messageType,
+            timestamp: Number(msg.messageTimestamp),
+        }, instanceName, remoteJid, vereadorId));
+
+        // Merge and sort by timestamp, deduplicate by id
+        const allMessages = [...outMessages, ...inMessages];
+        const seen = new Set<string>();
+        const unique = allMessages.filter(m => {
+            if (seen.has(m.id)) return false;
+            seen.add(m.id);
+            return true;
+        });
+
+        return unique.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    }
+
+    private async fetchApiMessages(vereadorId: string, instanceName: string, remoteJid: string): Promise<{ id: string; fromMe: boolean; content: string | null; type: string; timestamp: number }[]> {
         try {
             const result = await this.request(vereadorId, 'post', `/chat/findMessages/${instanceName}`, {
                 where: { key: { remoteJid } },
                 limit: 100,
             });
 
-            // Evolution API v2 returns: { messages: { total, pages, currentPage, records: [...] } }
             let records: any[] = [];
             if (result?.messages?.records && Array.isArray(result.messages.records)) {
                 records = result.messages.records;
             } else if (Array.isArray(result)) {
                 records = result;
             } else {
-                this.logger.warn(`findMessages returned unexpected format: ${JSON.stringify(result).substring(0, 200)}`);
                 return [];
             }
 
-            return records.map((msg: any, index: number) => {
+            return records.map((msg: any) => {
                 const isFromMe = msg.key?.fromMe || false;
-                const messageId = msg.key?.id;
-
-                // Try to get content from the message object (works for outbound)
                 let content = msg.message?.conversation
                     || msg.message?.extendedTextMessage?.text
                     || msg.message?.imageMessage?.caption
@@ -318,16 +371,7 @@ export class EvolutionApiService {
                     || (msg.message?.locationMessage ? '📍 Localização' : '')
                     || '';
 
-                // For inbound messages with message: null, try to get from cache
-                if (!content && !isFromMe && messageId) {
-                    const cached = this.inboundCache.get(messageId);
-                    if (cached) {
-                        content = cached.content;
-                    }
-                }
-
-                // Use messageType from the top-level field or detect from message content
-                let type: string = 'text';
+                let type = 'text';
                 const msgType = msg.messageType || '';
                 if (msgType === 'imageMessage' || msg.message?.imageMessage) type = 'image';
                 else if (msgType === 'audioMessage' || msg.message?.audioMessage) type = 'audio';
@@ -337,56 +381,32 @@ export class EvolutionApiService {
                 else if (msgType === 'locationMessage' || msg.message?.locationMessage) type = 'location';
                 else if (msgType === 'contactMessage' || msg.message?.contactMessage) type = 'contact';
 
-                // For unknown inbound messages with no content, use type label
                 if (!content && !isFromMe) {
-                    if (type === 'image') content = '📷 Imagem';
-                    else if (type === 'audio') content = '🎵 Áudio';
-                    else if (type === 'video') content = '🎥 Vídeo';
-                    else if (type === 'document') content = '📄 Documento';
-                    else if (type === 'sticker') content = '🏷️ Sticker';
-                    else if (type === 'contact') content = '👤 Contato';
-                    else if (type === 'location') content = '📍 Localização';
-                    else content = '💬 Mensagem recebida';
+                    content = '💬 Mensagem recebida';
                 }
 
-                const timestamp = msg.messageTimestamp
-                    ? new Date(Number(msg.messageTimestamp) * 1000).toISOString()
-                    : new Date().toISOString();
-
                 return {
-                    id: msg.key?.id || `msg_${index}`,
-                    conversationId: `evo_${instanceName}_${remoteJid.replace('@s.whatsapp.net', '')}`,
-                    wamid: msg.key?.id || null,
-                    direction: isFromMe ? 'outbound' : 'inbound',
-                    type,
+                    id: msg.key?.id || `msg_${Math.random().toString(36).substring(7)}`,
+                    fromMe: isFromMe,
                     content: content || null,
-                    mediaId: null,
-                    mediaMimeType: null,
-                    mediaLocalPath: null,
-                    mediaCaption: null,
-                    latitude: msg.message?.locationMessage?.degreesLatitude || null,
-                    longitude: msg.message?.locationMessage?.degreesLongitude || null,
-                    locationName: null,
-                    locationAddress: null,
-                    deliveryStatus: isFromMe ? 'read' : 'delivered',
-                    senderUserId: isFromMe ? vereadorId : null,
-                    senderUser: null,
-                    createdAt: timestamp,
+                    type,
+                    timestamp: Number(msg.messageTimestamp) || Math.floor(Date.now() / 1000),
                 };
-            });
+            }).filter(m => m.content); // Remove messages with no content
         } catch (error: any) {
-            this.logger.error(`Erro ao buscar mensagens: ${error.message}`);
+            this.logger.error(`Erro ao buscar mensagens da API: ${error.message}`);
             return [];
         }
     }
 
     // ─── Webhook Handler ───
 
-    handleIncomingWebhook(body: any): void {
+    async handleIncomingWebhook(body: any): Promise<void> {
         try {
             const event = body.event;
             const data = body.data;
             const instance = body.instance;
+            const instanceName = instance || body.instanceName || '';
 
             if (event === 'messages.upsert' && data) {
                 const key = data.key;
@@ -394,7 +414,7 @@ export class EvolutionApiService {
                 const fromMe = key?.fromMe || false;
                 const remoteJid = key?.remoteJid || '';
 
-                if (!fromMe && messageId && remoteJid.endsWith('@s.whatsapp.net')) {
+                if (messageId && remoteJid.endsWith('@s.whatsapp.net')) {
                     // Extract content from webhook data
                     const msg = data.message;
                     const content = msg?.conversation
@@ -411,20 +431,30 @@ export class EvolutionApiService {
                         || '💬 Mensagem';
 
                     const timestamp = data.messageTimestamp || Math.floor(Date.now() / 1000);
+                    const messageType = data.messageType || 'conversation';
+                    const pushName = data.pushName || key?.pushName || '';
 
-                    this.inboundCache.set(messageId, {
-                        content,
-                        type: data.messageType || 'conversation',
-                        timestamp,
-                        remoteJid,
-                    });
-
-                    this.logger.log(`📥 Cached inbound msg ${messageId} from ${remoteJid}: ${content.substring(0, 30)}`);
-
-                    // Limit cache size to 5000 entries
-                    if (this.inboundCache.size > 5000) {
-                        const first = this.inboundCache.keys().next().value;
-                        if (first) this.inboundCache.delete(first);
+                    // Persist to DB (upsert by messageId)
+                    try {
+                        const existing = await this.inboundMsgRepo.findOne({ where: { messageId } });
+                        if (!existing) {
+                            await this.inboundMsgRepo.save({
+                                messageId,
+                                instanceName,
+                                remoteJid,
+                                pushName,
+                                content,
+                                messageType,
+                                messageTimestamp: timestamp,
+                                fromMe,
+                            });
+                            this.logger.log(`📥 Saved inbound msg ${messageId} from ${remoteJid}: ${content.substring(0, 30)}`);
+                        }
+                    } catch (dbErr: any) {
+                        // Ignore duplicate key errors
+                        if (!dbErr.message?.includes('duplicate')) {
+                            this.logger.error(`DB save error: ${dbErr.message}`);
+                        }
                     }
                 }
             }

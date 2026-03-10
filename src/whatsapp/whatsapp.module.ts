@@ -12,6 +12,7 @@ import {
     WhatsappBotFlow,
     WhatsappSettings,
     WhatsappChannel,
+    EvolutionInboundMessage,
 } from './entities';
 import { WhatsappApiService } from './services/whatsapp-api.service';
 import { WhatsappMediaService } from './services/whatsapp-media.service';
@@ -46,6 +47,7 @@ import { WhatsappGateway } from './whatsapp.gateway';
             WhatsappBotFlow,
             WhatsappSettings,
             WhatsappChannel,
+            EvolutionInboundMessage,
         ]),
         MulterModule.register({ dest: './uploads/whatsapp' }),
     ],

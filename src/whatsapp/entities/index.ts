@@ -7,3 +7,4 @@ export { WhatsappInternalNote } from './whatsapp-internal-note.entity';
 export { WhatsappBotFlow, BotFlowStatus, BotStepType } from './whatsapp-bot-flow.entity';
 export { WhatsappSettings } from './whatsapp-settings.entity';
 export { WhatsappChannel, ChannelStatus } from './whatsapp-channel.entity';
+export { EvolutionInboundMessage } from './evolution-inbound-message.entity';
